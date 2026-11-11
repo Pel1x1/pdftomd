@@ -1,0 +1,38 @@
+name: build
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: PDF2MD-windows
+            path: dist/PDF2MD.exe
+          - os: macos-latest          # Apple Silicon
+            artifact: PDF2MD-mac-arm64
+            path: dist/PDF2MD-mac.zip
+          - os: macos-13              # Intel
+            artifact: PDF2MD-mac-intel
+            path: dist/PDF2MD-mac.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: pyinstaller --noconfirm --clean pdf2md.spec
+      - if: runner.os == 'macOS'
+        run: cd dist && ditto -c -k --keepParent PDF2MD.app PDF2MD-mac.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.path }}

@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>PDF → MD</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7385;
+    --line: #e4e7ec; --accent: #4f6bff; --accent-2: #3d57e6; --accent-soft: #eef1ff;
+    --ok: #16a34a; --ok-soft: #e8f7ee; --fail: #dc2626; --fail-soft: #fdeeee;
+    --warn: #d97706; --shadow: 0 1px 2px rgba(16,24,40,.05), 0 4px 16px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161b; --card: #1c1f26; --text: #e8eaf0; --muted: #8b93a7;
+      --line: #2b303b; --accent: #6b83ff; --accent-2: #8195ff; --accent-soft: #232a45;
+      --ok: #34d399; --ok-soft: #173327; --fail: #f87171; --fail-soft: #3a1e22;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    display: flex; flex-direction: column; padding: 20px 22px; gap: 14px;
+    user-select: none; -webkit-user-select: none;
+  }
+  header { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+    background: linear-gradient(135deg, #6b83ff, #4f6bff 60%, #7c4dff); color: #fff; font-weight: 700; font-size: 13px;
+  }
+  h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  .sub { color: var(--muted); font-size: 12.5px; }
+  .spacer { flex: 1; }
+
+  .drop {
+    border: 1.5px dashed var(--line); border-radius: 14px; background: var(--card);
+    padding: 22px; text-align: center; transition: .15s; cursor: pointer; box-shadow: var(--shadow);
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop .big { font-size: 15px; font-weight: 600; }
+  .drop .small { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  .drop .icon { font-size: 26px; line-height: 1; margin-bottom: 6px; color: var(--accent); }
+  .linkbtn { color: var(--accent); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-decoration: underline; }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button.btn {
+    font: inherit; font-weight: 550; border-radius: 9px; padding: 8px 14px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--card); color: var(--text); transition: .12s;
+  }
+  button.btn:hover:not(:disabled) { border-color: var(--accent); }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: var(--accent-2); }
+  button.btn:disabled { opacity: .45; cursor: default; }
+  select, label.chk {
+    font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line);
+    border-radius: 9px; padding: 7px 10px;
+  }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+  .list {
+    flex: 1; min-height: 120px; overflow: auto; background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+  }
+  .empty { height: 100%; display: grid; place-items: center; color: var(--muted); padding: 30px; text-align: center; }
+  .row {
+    display: grid; grid-template-columns: 28px 1fr auto auto; gap: 12px; align-items: center;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+  }
+  .row:last-child { border-bottom: 0; }
+  .ficon {
+    width: 28px; height: 32px; border-radius: 5px; background: var(--fail-soft); color: var(--fail);
+    font-size: 9px; font-weight: 700; display: grid; place-items: center;
+  }
+  .row.ok .ficon { background: var(--ok-soft); color: var(--ok); }
+  .name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta.err { color: var(--fail); }
+  .pill { font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 99px; white-space: nowrap; background: var(--bg); color: var(--muted); }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.fail { background: var(--fail-soft); color: var(--fail); }
+  .pill.working { background: var(--accent-soft); color: var(--accent); }
+  .spin {
+    display: inline-block; width: 9px; height: 9px; border: 2px solid currentColor; border-right-color: transparent;
+    border-radius: 50%; animation: r .7s linear infinite; vertical-align: -1px; margin-right: 5px;
+  }
+  @keyframes r { to { transform: rotate(360deg); } }
+  .acts { display: flex; gap: 4px; }
+  .ib {
+    border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: 7px;
+    padding: 5px 8px; font: inherit; font-size: 12.5px; font-weight: 550;
+  }
+  .ib:hover { background: var(--bg); color: var(--text); }
+  .ib.go { color: var(--accent); }
+
+  footer { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .progress { flex: 1; min-width: 160px; }
+  .bar { height: 6px; background: var(--line); border-radius: 9px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+  .stat { color: var(--muted); font-size: 12.5px; margin-top: 5px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px); opacity: 0;
+    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; transition: .2s;
+    display: flex; gap: 12px; align-items: center; box-shadow: var(--shadow); pointer-events: none; max-width: 90%;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+  .toast button { background: none; border: 0; color: var(--accent-2); font: inherit; font-weight: 650; cursor: pointer; }
+
+  .modal { position: fixed; inset: 0; background: rgba(10,12,18,.45); display: none; padding: 30px; }
+  .modal.show { display: flex; }
+  .sheet {
+    margin: auto; width: 100%; max-width: 860px; height: 100%; background: var(--card);
+    border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow);
+  }
+  .sheet header { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .sheet pre {
+    flex: 1; margin: 0; overflow: auto; padding: 16px 18px; white-space: pre-wrap; word-break: break-word;
+    font: 12.5px/1.55 ui-monospace, "SF Mono", Consolas, Menlo, monospace; user-select: text; -webkit-user-select: text;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">MD</div>
+    <div>
+      <h1>PDF → Markdown</h1>
+      <div class="sub">Перетащите файлы, нажмите «Конвертировать», сохраните результат</div>
+    </div>
+  </header>
+
+  <div class="drop" id="drop">
+    <div class="icon">⤓</div>
+    <div class="big">Перетащите сюда PDF-файлы или папки</div>
+    <div class="small">или <button class="linkbtn" id="pickFiles">выберите файлы</button> ·
+      <button class="linkbtn" id="pickFolder">выберите папку</button></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn primary" id="convert" disabled>Конвертировать</button>
+    <select id="engine" title="Движок">
+      <option value="pymupdf4llm">Точный режим</option>
+      <option value="pymupdf">Быстрый режим</option>
+    </select>
+    <label class="chk" title="Добавить YAML-шапку с названием и числом страниц">
+      <input type="checkbox" id="fm"> YAML-шапка
+    </label>
+    <div class="spacer"></div>
+    <button class="btn" id="clear" disabled>Очистить</button>
+  </div>
+
+  <div class="list" id="list"></div>
+
+  <footer>
+    <div class="progress">
+      <div class="bar"><i id="bar"></i></div>
+      <div class="stat" id="stat">Нет файлов</div>
+    </div>
+    <button class="btn" id="saveZip" disabled>Скачать ZIP</button>
+    <button class="btn primary" id="saveAll" disabled>Сохранить все в папку</button>
+  </footer>
+
+  <div class="toast" id="toast"><span id="toastText"></span><button id="toastBtn">Показать</button></div>
+
+  <div class="modal" id="modal">
+    <div class="sheet">
+      <header>
+        <strong id="pvTitle" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></strong>
+        <div class="spacer"></div>
+        <button class="btn" id="pvCopy">Копировать</button>
+        <button class="btn" id="pvSave">Сохранить…</button>
+        <button class="btn" id="pvClose">Закрыть</button>
+      </header>
+      <pre id="pvText"></pre>
+    </div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const items = new Map();          // id -> item (порядок вставки = порядок в списке)
+let busy = false, pvId = null, toastPath = null, toastTimer = null;
+
+const api = () => window.pywebview.api;
+
+function size(n) {
+  if (n < 1024) return n + " B";
+  const u = ["KB", "MB", "GB"]; let i = -1;
+  do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
+  return n.toFixed(1) + " " + u[i];
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+const LABEL = { queued: "В очереди", waiting: "Ожидает", working: "Обработка", ok: "Готово", fail: "Ошибка" };
+
+function rowHtml(it) {
+  let meta = size(it.size);
+  if (it.status === "ok") meta = `${size(it.size)} → ${size(it.out_size)} · ${it.pages} стр · ${it.secs.toFixed(1)} с`;
+  const metaCls = it.status === "fail" ? "meta err" : "meta";
+  if (it.status === "fail") meta = it.note;
+  const spin = it.status === "working" ? '<span class="spin"></span>' : "";
+  let acts = "";
+  if (it.status === "ok")
+    acts += `<button class="ib" data-a="view">Открыть</button><button class="ib go" data-a="save">Сохранить</button>`;
+  if (it.status !== "working" && it.status !== "waiting")
+    acts += `<button class="ib" data-a="rm" title="Убрать из списка">✕</button>`;
+  return `<div class="row ${it.status}" data-id="${it.id}">
+    <div class="ficon">${it.status === "ok" ? "MD" : "PDF"}</div>
+    <div style="min-width:0"><div class="name" title="${esc(it.name)}">${esc(it.name)}</div>
+      <div class="${metaCls}" title="${esc(meta)}">${esc(meta)}</div></div>
+    <span class="pill ${it.status}">${spin}${LABEL[it.status]}</span>
+    <div class="acts">${acts}</div></div>`;
+}
+
+function render() {
+  const list = $("list");
+  if (!items.size) {
+    list.innerHTML = '<div class="empty">Список пуст.<br>Добавьте PDF — можно сразу много.</div>';
+  } else {
+    list.innerHTML = [...items.values()].map(rowHtml).join("");
+  }
+  refresh();
+}
+
+function refresh() {
+  const all = [...items.values()];
+  const n = all.length;
+  const ok = all.filter(i => i.status === "ok").length;
+  const fail = all.filter(i => i.status === "fail").length;
+  const todo = all.filter(i => i.status === "queued" || i.status === "fail").length;
+  const finished = ok + fail;
+  const running = all.filter(i => i.status === "working" || i.status === "waiting").length;
+
+  $("convert").disabled = busy || (!todo && !ok);
+  $("convert").textContent = busy ? "Конвертация…" : (todo ? `Конвертировать (${todo})` : "Конвертировать заново");
+  $("clear").disabled = busy || !n;
+  $("saveAll").disabled = $("saveZip").disabled = !ok;
+  $("saveAll").textContent = ok ? `Сохранить все в папку (${ok})` : "Сохранить все в папку";
+
+  const denom = finished + running;
+  const pct = denom ? Math.round(100 * finished / denom) : 0;
+  $("bar").style.width = pct + "%";
+  let s = n ? `Файлов: ${n}` : "Нет файлов";
+  if (ok) s += ` · готово: ${ok}`;
+  if (fail) s += ` · ошибок: ${fail}`;
+  if (busy) s += ` · в работе: ${running}`;
+  $("stat").textContent = s;
+}
+
+function toast(text, path) {
+  $("toastText").textContent = text;
+  toastPath = path || null;
+  $("toastBtn").style.display = path ? "" : "none";
+  $("toast").classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.remove("show"), 5000);
+}
+
+// ───── вызывается из Python ─────
+window.app = {
+  added(list) {
+    list.forEach(it => items.set(it.id, it));
+    render();
+    if (!list.length) toast("PDF-файлы не найдены");
+  },
+  update(it) { items.set(it.id, it); render(); },
+  started() { busy = true; refresh(); },
+  finished(r) {
+    busy = false; render();
+    const all = [...items.values()];
+    const fail = all.filter(i => i.status === "fail").length;
+    toast(fail ? `Готово за ${r.secs} с, с ошибкой: ${fail}` : `Готово за ${r.secs} с`);
+  },
+};
+
+// ───── действия ─────
+async function addFrom(fn) { app.added(await api()[fn]()); }
+$("pickFiles").onclick = (e) => { e.stopPropagation(); addFrom("pick_files"); };
+$("pickFolder").onclick = (e) => { e.stopPropagation(); addFrom("pick_folder"); };
+$("drop").onclick = () => addFrom("pick_files");
+
+$("convert").onclick = async () => {
+  const hasTodo = [...items.values()].some(i => i.status === "queued" || i.status === "fail");
+  const started = await api().convert($("engine").value, $("fm").checked, !hasTodo);
+  if (started) { busy = true; refresh(); }
+};
+$("clear").onclick = async () => {
+  await api().clear();
+  for (const [k, v] of items) if (v.status !== "working") items.delete(k);
+  render();
+};
+$("saveAll").onclick = async () => {
+  const r = await api().save_all();
+  if (r) toast(`Сохранено файлов: ${r.count}`, r.path);
+};
+$("saveZip").onclick = async () => {
+  const r = await api().save_zip();
+  if (r) toast(`ZIP сохранён (${r.count} файл.)`, r.path);
+};
+$("toastBtn").onclick = () => toastPath && api().reveal(toastPath);
+
+$("list").onclick = async (e) => {
+  const b = e.target.closest("button[data-a]"); if (!b) return;
+  const id = b.closest(".row").dataset.id;
+  const a = b.dataset.a;
+  if (a === "rm") { await api().remove(id); items.delete(id); render(); }
+  if (a === "save") { const p = await api().save_one(id); if (p) toast("Файл сохранён", p); }
+  if (a === "view") openPreview(id);
+};
+
+async function openPreview(id) {
+  pvId = id;
+  $("pvTitle").textContent = items.get(id).name.replace(/\.pdf$/i, ".md");
+  $("pvText").textContent = await api().preview(id);
+  $("modal").classList.add("show");
+}
+$("pvClose").onclick = () => $("modal").classList.remove("show");
+$("modal").onclick = (e) => { if (e.target.id === "modal") $("modal").classList.remove("show"); };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").classList.remove("show"); });
+$("pvSave").onclick = async () => { const p = await api().save_one(pvId); if (p) toast("Файл сохранён", p); };
+$("pvCopy").onclick = async () => {
+  const text = $("pvText").textContent;
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand("copy"); ta.remove();
+  }
+  toast("Скопировано в буфер обмена");
+};
+
+// подсветка зоны при перетаскивании (сами файлы ловит Python)
+let dragDepth = 0;
+document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; $("drop").classList.add("over"); });
+document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("drop").classList.remove("over"); } });
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", (e) => { e.preventDefault(); dragDepth = 0; $("drop").classList.remove("over"); });
+
+window.addEventListener("pywebviewready", async () => {
+  const engines = await api().engines();
+  [...$("engine").options].forEach(o => { if (!engines.includes(o.value)) o.remove(); });
+});
+render();
+</script>
+</body>
+</html>
